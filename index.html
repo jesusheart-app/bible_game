@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- 앱 설치를 위한 필수 설정 -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="말씀암송">
+    <title>말씀 암송 게임</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+
+    <style>
+        :root { --base-size: 24px; }
+        body { 
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; 
+            font-size: var(--base-size); 
+            text-align: center; 
+            padding: 20px; 
+            background-color: #f4f6f8; 
+            margin: 0;
+            user-select: none;
+        }
+        
+        .screen { display: none; }
+        .screen.active { display: block; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .controls span { font-weight: bold; color: #555; font-size: 0.9em; }
+        .btn-control { 
+            font-size: 0.8em; font-weight: bold; padding: 8px 15px; 
+            background-color: #fff; border: 2px solid #ccc; border-radius: 8px; cursor: pointer; 
+        }
+        .btn-control:active { background-color: #eee; }
+        .btn-back { background-color: #34495e; color: white; border: none; font-size: 0.9em; padding: 10px 20px; border-radius: 10px; font-weight: bold; }
+
+        .menu-title { font-weight: bold; font-size: 1.4em; color: #2c3e50; margin-bottom: 20px; }
+        .verse-list { display: flex; flex-direction: column; gap: 15px; }
+        .verse-item {
+            background-color: white; border-radius: 15px; padding: 20px;
+            font-size: 1.1em; font-weight: bold; color: #2980b9;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; border: none;
+            transition: transform 0.1s;
+            text-align: center; line-height: 1.4;
+        }
+        .verse-item:active { transform: scale(0.98); background-color: #f0f0f0; }
+
+        .game-title { font-weight: bold; font-size: 1.3em; margin-bottom: 20px; color: #2c3e50; line-height: 1.4; }
+        .target-area { 
+            min-height: 120px; border: 3px dashed #bdc3c7; border-radius: 15px; 
+            padding: 20px; margin-bottom: 30px; background-color: white; 
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; align-items: center;
+        }
+        .pool-area { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+        button.word-btn, button.target-btn { 
+            font-size: 1em; font-weight: bold; padding: 12px 20px; 
+            border-radius: 12px; border: none; cursor: pointer; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            transition: transform 0.1s;
+        }
+        button.word-btn:active, button.target-btn:active { transform: scale(0.95); }
+        .word-btn { background-color: #27ae60; color: white; }
+        .target-btn { background-color: #2980b9; color: white; }
+
+        .message { font-size: 1.3em; color: #e74c3c; font-weight: bold; margin-top: 20px; display: none; line-height: 1.5;}
+        .restart-btn { 
+            font-size: 0.9em; padding: 12px 25px; background-color: #f39c12; 
+            color: white; border: none; border-radius: 10px; margin-top: 15px; cursor: pointer; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="menu-screen" class="screen active">
+        <div class="header">
+            <div class="controls">
+                <button class="btn-control" onclick="changeSize(2)">글씨 ＋</button>
+                <button class="btn-control" onclick="changeSize(-2)">글씨 －</button>
+            </div>
+        </div>
+        <div class="menu-title">📖 아버님의 암송 노트</div>
+        <div class="verse-list" id="verse-list"></div>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div class="header">
+            <button class="btn-control btn-back" onclick="showMenu()">◀ 목록으로</button>
+            <div class="controls">
+                <button class="btn-control" onclick="changeSize(2)">글씨 ＋</button>
+                <button class="btn-control" onclick="changeSize(-2)">글씨 －</button>
+            </div>
+        </div>
+        
+        <div class="game-title" id="game-title">말씀 제목</div>
+        <div class="target-area" id="target"></div>
+        <div class="pool-area" id="pool"></div>
+
+        <div class="message" id="message">
+            🎉 아멘! 참 잘하셨습니다! 🎉<br>
+            <button class="restart-btn" onclick="initGame()">다시 하기 ↻</button>
+        </div>
+    </div>
+
+    <script>
+        const verseDatabase = [
+            { title: "로마서 12:11", words: ["부지런하여", "게으르지 말고", "열심을 품고", "주를 섬기라"] },
+            { title: "빌립보서 4:4", words: ["주 안에서", "항상 기뻐하라", "내가 다시 말하노니", "기뻐하라"] },
+            { title: "잠언 4:23", words: ["모든 지킬 만한 중에", "더욱 네 마음을 지키라", "생명의 근원이", "이에서 남이니라"] },
+            { title: "예레미야 33:3", words: ["너는 내게 부르짖으라", "내가 네게 응답하겠고", "네가 알지 못하는", "크고 은밀한 일을", "네게 보이리라"] },
+            { title: "데살로니가전서 5:16~18", words: ["항상 기뻐하라", "쉬지 말고 기도하라", "범사에 감사하라", "이것이 그리스도 예수 안에서", "너희를 향하신", "하나님의 뜻이니라"] },
+            { title: "시편 18:1", words: ["나의 힘이신 여호와여", "내가 주를", "사랑하나이다"] },
+            { title: "시편 23:1", words: ["여호와는", "나의 목자시니", "내게 부족함이", "없으리로다"] },
+            { title: "요한복음 14:6", words: ["예수께서 이르시되", "내가 곧 길이요", "진리요 생명이니", "나로 말미암지 않고는", "아버지께로 올 자가", "없느니라"] },
+            { title: "고린도전서 13:13", words: ["그런즉", "믿음 소망 사랑", "이 세 가지는", "항상 있을 것인데", "그 중의 제일은", "사랑이라"] },
+            { title: "사도행전 16:31", words: ["이르되", "주 예수를 믿으라", "그리하면", "너와 네 집이", "구원을 받으리라", "하고"] }
+        ];
+
+        let currentSize = 24; 
+        let currentVerseIndex = 0;
+        let correctOrder = [];
+        let currentWords = [];
+        let poolWords = [];
+
+        function changeSize(delta) {
+            currentSize += delta;
+            if (currentSize < 16) currentSize = 16; 
+            if (currentSize > 40) currentSize = 40; 
+            document.documentElement.style.setProperty('--base-size', currentSize + 'px');
+        }
+
+        function buildMenu() {
+            const listDiv = document.getElementById('verse-list');
+            listDiv.innerHTML = '';
+            verseDatabase.forEach((verse, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'verse-item';
+                btn.innerText = verse.title;
+                btn.onclick = () => openGame(index);
+                listDiv.appendChild(btn);
+            });
+        }
+
+        function showMenu() {
+            document.getElementById('game-screen').classList.remove('active');
+            document.getElementById('menu-screen').classList.add('active');
+        }
+
+        function openGame(index) {
+            currentVerseIndex = index;
+            document.getElementById('menu-screen').classList.remove('active');
+            document.getElementById('game-screen').classList.add('active');
+            document.getElementById('game-title').innerText = "📖 " + verseDatabase[index].title;
+            correctOrder = verseDatabase[index].words;
+            initGame();
+        }
+
+        function shuffle(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex != 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        function initGame() {
+            currentWords = [];
+            poolWords = shuffle([...correctOrder]);
+            document.getElementById('message').style.display = 'none';
+            render();
+        }
+
+        function moveToTarget(word, index) {
+            poolWords.splice(index, 1);
+            currentWords.push(word);
+            render();
+            checkWin();
+        }
+
+        function moveToPool(word, index) {
+            currentWords.splice(index, 1);
+            poolWords.push(word);
+            render();
+        }
+
+        function render() {
+            const targetDiv = document.getElementById('target');
+            const poolDiv = document.getElementById('pool');
+            
+            targetDiv.innerHTML = '';
+            poolDiv.innerHTML = '';
+
+            if(currentWords.length === 0) {
+                targetDiv.innerHTML = '<span style="color:#999; font-size: 0.8em;">아래 말씀 조각을 순서대로 눌러보세요</span>';
+            } else {
+                currentWords.forEach((word, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'target-btn';
+                    btn.innerText = word;
+                    btn.onclick = () => moveToPool(word, index);
+                    targetDiv.appendChild(btn);
+                });
+            }
+
+            poolWords.forEach((word, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'word-btn';
+                btn.innerText = word;
+                btn.onclick = () => moveToTarget(word, index);
+                poolDiv.appendChild(btn);
+            });
+        }
+
+        function playSuccessSound() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return; 
+            const ctx = new AudioContext();
+            const notes = [659.25, 830.61, 987.77]; 
+            let startTime = ctx.currentTime;
+
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                osc.type = 'sine'; 
+                osc.frequency.value = freq;
+                osc.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                osc.start(startTime + i * 0.15); 
+                gainNode.gain.setValueAtTime(0.5, startTime + i * 0.15);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + i * 0.15 + 0.5);
+                osc.stop(startTime + i * 0.15 + 0.5);
+            });
+        }
+
+        function checkWin() {
+            if (currentWords.length === correctOrder.length) {
+                let isWin = true;
+                for (let i = 0; i < correctOrder.length; i++) {
+                    if (currentWords[i] !== correctOrder[i]) isWin = false;
+                }
+                if (isWin) {
+                    document.getElementById('message').style.display = 'block';
+                    document.getElementById('pool').innerHTML = ''; 
+                    playSuccessSound();
+                }
+            }
+        }
+
+        buildMenu();
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</body>
+</html>
